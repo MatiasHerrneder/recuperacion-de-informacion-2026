@@ -58,19 +58,23 @@ def lex(dir: str, stop_words_file: str | None = None, min_term_length: int = 3, 
         cfs[term] = sum(doc_list.values())
         for doc, freq in doc_list.items():
             if doc not in docs:
-                docs[doc] = {term: freq}
+                docs[doc] = {}
+            docs[doc][term] = freq
     cfs = dict(sorted(cfs.items(), key=lambda item: item[1]))
     
-    _, shortest_terms = min(
-        docs.items(),
-        key=lambda item: sum(item[1].values())
-    )
-    _, longest_terms = max(
-        docs.items(),
-        key=lambda item: sum(item[1].values())
-    )
-    shortest_tokens = sum(shortest_terms.values())
-    longest_tokens = sum(longest_terms.values())
+    if not docs:
+        shortest_tokens = longest_tokens = 0
+    else:
+        _, shortest_terms = min(
+            docs.items(),
+            key=lambda item: sum(item[1].values())
+        )
+        _, longest_terms = max(
+            docs.items(),
+            key=lambda item: sum(item[1].values())
+        )
+        shortest_tokens = sum(shortest_terms.values())
+        longest_tokens = sum(longest_terms.values())
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
