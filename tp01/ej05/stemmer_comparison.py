@@ -57,11 +57,9 @@ def tokenize(text: str, stemming: StemmerType | None = None) -> list[str]:
     remaining = re.findall(r'[^\W\d_]+', remaining.lower())
     
     if stemming == StemmerType.PORTER:
-        for word in remaining:
-            word = porter_stemmer(word)
+        remaining = porter_stemmer(remaining)
     elif stemming == StemmerType.LANCASTER:
-        for word in remaining:
-            word = lancaster_stemmer(word)
+        remaining = lancaster_stemmer(remaining)
 
     return emails + urls + dates + phones + numbers + abrevitures + acronyms + names + remaining
 
@@ -83,31 +81,42 @@ def tokenizer(dir: str, stop_words_file: str | None = None, stemming: StemmerTyp
         with open(stop_words_file, 'r', encoding='utf-8') as f:
             stop_words = set(re.findall(r'[a-z]+', f.read().lower()))
     
-    if not os.path.isdir(dir):
-        print(f"Error: La ruta '{dir}' no es un directorio válido.")
-        return
-
     TXT_FILE_REGEX = re.compile(r"\.txt$", re.IGNORECASE)
+    TREC_FILE_REGEX = re.compile(r"\.trec$", re.IGNORECASE)
 
-    for root, _, files in os.walk(dir):
+    if os.path.isdir(dir):
+        files_to_process = os.walk(dir)
+    else:
+        if os.path.isfile(dir) and (TXT_FILE_REGEX.search(dir) or TREC_FILE_REGEX.search(dir)):
+            files_to_process = [(os.path.dirname(dir), [], [os.path.basename(dir)])]
+        else:
+            raise Exception(f"Error: La ruta '{dir}' no es un directorio o archivo válido.")
+
+    for root, _, files in files_to_process:
         for file in files:
-            if TXT_FILE_REGEX.search(file):
-                try:
-                    # uso de id interno para documentos
-                    # genera problemas si hay nombres de archivos repetidos
-                    if file in seen_files:
-                        raise Exception(f"Archivo '{file}' ya procesado, no se permiten nombres de archivos repetidos.")
-                    seen_files.add(file)
-                    doc_id = len(doc_index)
-                    doc_index[doc_id] = file
-                    
+            if TXT_FILE_REGEX.search(file) or TREC_FILE_REGEX.search(file): 
+                try:                    
                     with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
-                        words = tokenize(f.read(), stemming)
-                        for word in words:
-                            if word not in stop_words and min_term_length <= len(word) <= max_term_length:
-                                if word not in terms:
-                                    terms[word] = {}
-                                terms[word][doc_id] = terms[word].get(doc_id, 0) + 1
+                        content = f.read()
+                        if TREC_FILE_REGEX.search(file):
+                            raw_docs = parse_trec(content)
+                        else:
+                            raw_docs = [(file, content)]
+
+                        for docno, text in raw_docs:
+                            doc_key = f"{file}::{docno}" if docno else file
+                            if doc_key in seen_files:
+                                raise Exception(f"Archivo '{file}' ya procesado, no se permiten nombres de archivos repetidos.")
+                            seen_files.add(doc_key)
+                            doc_id = len(doc_index)
+                            doc_index[doc_id] = doc_key
+
+                            words = tokenize(text, stemming)
+                            for word in words:
+                                if word not in stop_words and min_term_length <= len(word) <= max_term_length:
+                                    if word not in terms:
+                                        terms[word] = {}
+                                    terms[word][doc_id] = terms[word].get(doc_id, 0) + 1
                 except Exception as e:
                     print(f"Error al leer el archivo '{file}': {e}")
                 
@@ -181,35 +190,62 @@ def tokenizer(dir: str, stop_words_file: str | None = None, stemming: StemmerTyp
     print(f"Resultados en /{LOCAL_OUTPUT}")
 
 
-def porter_stemmer(text: str | list[str]) -> set[str]:
+def porter_stemmer(text: str | list[str]) -> list[str]:
     return stemmer(PorterStemmer(), text)
 
-def lancaster_stemmer(text: str | list[str]) -> set[str]:
+def lancaster_stemmer(text: str | list[str]) -> list[str]:
     return stemmer(LancasterStemmer(), text)
 
-def stemmer(stemmer_mod, text: str | list[str]) -> set[str]:
+def stemmer(stemmer_mod, text: str | list[str]) -> list[str]:
+    """Generic stemmer function that can handle both single strings and lists of strings."""
     if isinstance(text, str):
-        return {stemmer_mod.stem(text)}
-    return {stemmer_mod.stem(word) for word in text}
+        return [stemmer_mod.stem(text)]
+    return [stemmer_mod.stem(word) for word in text]
+
+
+DOC_BLOCK_REGEX = re.compile(r"<DOC>(.*?)</DOC>", re.DOTALL)
+DOCNO_REGEX = re.compile(r"<DOCNO>\s*(.*?)\s*</DOCNO>", re.DOTALL)
+TAG_REGEX = re.compile(r"<[^>]+>")
+
+def parse_trec(content: str):
+    """Returns a list of (docno, texto) for each <DOC> in the file."""
+    docs = []
+    for match in DOC_BLOCK_REGEX.finditer(content):
+        block = match.group(1)
+        
+        docno_match = DOCNO_REGEX.search(block)
+        docno = docno_match.group(1) if docno_match else None
+
+        text = TAG_REGEX.sub(" ", block)
+        text = text.strip()
+        
+        docs.append((docno, text))
+    return docs
 
 
 def compare(dir: str, stop_words_file: str | None = None) -> None:
+    porter_time = None
+    lancaster_time = None
+    try:
+        start = time.perf_counter()
+        tokenizer(dir, stop_words_file, StemmerType.PORTER)
+        end = time.perf_counter()
+        porter_time = end - start
+    except Exception as e:
+        print(f"Error occurred while processing Porter Stemmer: {e}")
 
-    #TODO falta preprocesado 
+    try:
+        start = time.perf_counter()
+        tokenizer(dir, stop_words_file, StemmerType.LANCASTER)
+        end = time.perf_counter()
+        lancaster_time = end - start
+    except Exception as e:
+        print(f"Error occurred while processing Lancaster Stemmer: {e}")
 
-    start = time.perf_counter()
-    tokenizer(dir, stop_words_file, StemmerType.PORTER)
-    end = time.perf_counter()
-    porter_time = end - start
-    
-    start = time.perf_counter()
-    tokenizer(dir, stop_words_file, StemmerType.LANCASTER)
-    end = time.perf_counter()
-    lancaster_time = end - start
-
-    with open(f"{OUTPUT_DIR}/times.txt", 'w', encoding='utf-8') as f:
-        f.write(f"Porter Stemmer took: {porter_time:4f} seconds\n")
-        f.write(f"Lancaster Stemmer took: {lancaster_time:.4f} seconds\n")
+    if porter_time is not None and lancaster_time is not None:
+        with open(f"{OUTPUT_DIR}/times.txt", 'w', encoding='utf-8') as f:
+            f.write(f"Porter {porter_time:.4f} s\n")
+            f.write(f"Lancaster {lancaster_time:.4f} s\n")
 
 
 def main():
