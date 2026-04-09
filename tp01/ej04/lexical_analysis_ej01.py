@@ -2,10 +2,10 @@ import os
 import re
 import argparse
 import nltk
-from nltk.stem import PorterStemmer
+from nltk.stem import SnowballStemmer
 
 nltk.download('punkt')
-ps = PorterStemmer()
+ss = SnowballStemmer('spanish')
 
 def lex(dir: str) -> dict[str, list | dict[str, int]]:
     """
@@ -33,7 +33,7 @@ def lex(dir: str) -> dict[str, list | dict[str, int]]:
                         words = re.findall(r'[a-z]+', f.read().lower())
                         token_count += len(words)
                         for word in set(words):
-                            word = ps.stem(word)
+                            word = ss.stem(word)
                             dfs[word] = dfs.get(word, 0) + 1
                 except Exception as e:
                     print(f"Error al leer el archivo '{file}': {e}")

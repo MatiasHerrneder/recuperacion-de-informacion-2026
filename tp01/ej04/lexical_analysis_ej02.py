@@ -2,10 +2,10 @@ import os
 import re
 import argparse
 import nltk
-from nltk.stem import PorterStemmer
+from nltk.stem import SnowballStemmer
 
 nltk.download('punkt')
-ps = PorterStemmer()
+ss = SnowballStemmer('spanish')
 
 
 OUTPUT_DIR = "output"
@@ -46,7 +46,7 @@ def lex(dir: str, stop_words_file: str | None = None, min_term_length: int = 3, 
                         words = re.findall(r'[a-z]+', f.read().lower())
                         for word in words:
                             if word not in stop_words and min_term_length <= len(word) <= max_term_length:
-                                word = ps.stem(word)
+                                word = ss.stem(word)
                                 if word not in terms:
                                     terms[word] = {}
                                 terms[word][doc_id] = terms[word].get(doc_id, 0) + 1
