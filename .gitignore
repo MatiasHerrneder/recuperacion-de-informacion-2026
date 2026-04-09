@@ -2,3 +2,4 @@
 test_data
 output
 .venv
+__pycache__
