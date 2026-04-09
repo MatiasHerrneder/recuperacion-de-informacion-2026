@@ -24,7 +24,7 @@ def tokenize(text: str) -> list[str]:
     dates = DATE_REGEX.findall(remaining)
     remaining = DATE_REGEX.sub("", remaining)
 
-    PHONE_REGEX = re.compile(r'(?:\+\d{1,3}[ -])?\(?\d{2,4}\)?[ -]\d{3,4}(?:[ -]\d{3,4})?')
+    PHONE_REGEX = re.compile(r'(?:\+\d{1,3}[-])?\(?\d{2,4}\)?[-]\d{3,4}(?:[-]\d{3,4})?')
     phones = PHONE_REGEX.findall(remaining)
     remaining = PHONE_REGEX.sub("", remaining)
 
@@ -32,7 +32,7 @@ def tokenize(text: str) -> list[str]:
     numbers = NUMBER_REGEX.findall(remaining)
     remaining = NUMBER_REGEX.sub("", remaining)
 
-    ABREVIATURES_REGEX = re.compile(r'\b(?:[A-Z][a-z]*\.)+')
+    ABREVIATURES_REGEX = re.compile(r'\b(?:[A-Z]+[a-z]*\.)+[A-Z]*')
     abrevitures = ABREVIATURES_REGEX.findall(remaining)
     remaining = ABREVIATURES_REGEX.sub("", remaining)
 
