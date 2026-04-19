@@ -1,4 +1,5 @@
 *.zip
+*.tar.gz
 test_data
 output
 .venv
