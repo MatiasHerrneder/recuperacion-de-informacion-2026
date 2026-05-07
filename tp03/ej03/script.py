@@ -13,7 +13,17 @@ if not pt.java.started():
 
 PIPELINE = "Stopwords,PorterStemmer"
 OUTPUT_DIR = "output"
-MODEL = "TF_IDF"
+
+MODELS: list[tuple[str, float | None]] = [
+    ("TF_IDF",       None),
+    ("BM25",         None),
+    ("Hiemstra_LM",  0.2),
+    ("Hiemstra_LM",  0.5),
+    ("Hiemstra_LM",  0.9),
+    ("DirichletLM",  50.0),
+    ("DirichletLM",  500.0),
+    ("DirichletLM",  2500.0),
+]
 
 def read_corpus(filepath: str):
     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
@@ -67,7 +77,7 @@ def read_qrels_df(filepath: str, valid_qids: set[str]) -> pd.DataFrame:
 
 
 def indexer(filepath: str, force_reindex: bool = False):
-    index_path      = os.path.join(os.getcwd(), OUTPUT_DIR, "index")
+    index_path = os.path.join(os.getcwd(), OUTPUT_DIR, "index")
     data_properties = os.path.join(index_path, "data.properties")
     assert pt.IndexFactory is not None
     if os.path.exists(data_properties) and not force_reindex:
@@ -84,40 +94,50 @@ def indexer(filepath: str, force_reindex: bool = False):
     return pt.IndexFactory.of(idx.index(read_corpus(filepath)))
 
 
-# retriever
-def retriever(index, topics: pd.DataFrame, qrels: pd.DataFrame, model: str = MODEL):
-    out_dir = os.path.join(os.getcwd(), OUTPUT_DIR, model)
+def retriever(topics: pd.DataFrame, qrels: pd.DataFrame, model: str, smooth: float | None = None):
+    # nombre único para el output
+    if smooth is not None:
+        run_name = f"{model}_s{smooth}"
+    else:
+        run_name = model
+
+    out_dir = os.path.join(os.getcwd(), OUTPUT_DIR, run_name)
     os.makedirs(out_dir, exist_ok=True)
 
-    assert pt.terrier.Retriever is not None
-    br = pt.terrier.Retriever(
-        index,
-        wmodel=model,
-        num_results=1000,
-        metadata=["docno"],
-        properties={"termpipelines": PIPELINE},
-    )
+    index_path    = os.path.join(os.getcwd(), OUTPUT_DIR, "index")
+    terrier_index = pt.terrier.TerrierIndex(index_path)
+
+    if model == "TF_IDF":
+        br = terrier_index.tf_idf(num_results=1000)
+    elif model == "BM25":
+        br = terrier_index.bm25(num_results=1000)
+    elif model == "Hiemstra_LM":
+        assert smooth is not None, "Hiemstra_LM requiere un valor de suavizado (Lambda)"
+        br = terrier_index.hiemstra_lm(Lambda=smooth, num_results=1000)
+    elif model == "DirichletLM":
+        assert smooth is not None, "DirichletLM requiere un valor de suavizado (mu)"
+        br = terrier_index.dirichlet_lm(mu=smooth, num_results=1000)
+    else:
+        raise ValueError(f"Modelo desconocido: {model}")
 
     recall_levels = [round(i / 10, 1) for i in range(11)]
     eval_metrics  = [AP, P @ 10, nDCG @ 10, *[IPrec @ r for r in recall_levels]]
 
-    # dos llamadas separadas — perquery=True ya no devuelve tupla
     aggregate_df = cast(pd.DataFrame, pt.Experiment(
         [br], topics, qrels,
         eval_metrics=eval_metrics,
-        names=[model],
+        names=[run_name],
     ))
     perquery_df = cast(pd.DataFrame, pt.Experiment(
         [br], topics, qrels,
         eval_metrics=eval_metrics,
-        names=[model],
+        names=[run_name],
         perquery=True,
     ))
-    # perquery_df: columnas → name | qid | AP | P@10 | nDCG@10 | IPrec@0.0 | …
 
-    _save_global_metrics(aggregate_df, model, out_dir)
-    _save_rp_curve(perquery_df, model, recall_levels, out_dir)
-    _save_per_query_distribution(perquery_df, model, out_dir)
+    _save_global_metrics(aggregate_df, run_name, out_dir)
+    _save_rp_curve(perquery_df, run_name, recall_levels, out_dir)
+    _save_per_query_distribution(perquery_df, run_name, out_dir)
 
 
 def _save_global_metrics(aggregate_df: pd.DataFrame, model: str, out_dir: str):
@@ -224,7 +244,10 @@ def main():
 
     topics = read_queries(args.queries)
     qrels  = read_qrels_df(args.qrels, set(topics["qid"]))
-    retriever(index, topics, qrels)
+    for model, smooth in MODELS:
+        label = f"{model}_s{smooth}" if smooth is not None else model
+        print(f"Procesando: {label}")
+        retriever(topics, qrels, model=model, smooth=smooth)
 
 if __name__ == "__main__":
     main()
