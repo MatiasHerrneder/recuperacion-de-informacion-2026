@@ -1,6 +1,7 @@
 *.zip
 *.tar.gz
 test_data
-output
+output*/
+bsbi_experiments/
 .venv
 __pycache__
