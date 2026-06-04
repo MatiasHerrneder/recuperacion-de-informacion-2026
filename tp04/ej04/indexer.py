@@ -9,7 +9,7 @@ from PostingChunk import PostingChunk
 import shutil
 
 
-def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "output", stop_words_path: str | None = None):
+def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "output3", stop_words_path: str | None = None):
     '''
     Implementa el algoritmo BSBI para indexar un corpus de documentos
     corpus_path: ruta al directorio con el corpus
@@ -76,7 +76,8 @@ def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "outp
                     doc_id = len(doc_index)
                     doc_index[doc_id] = doc_key
 
-                    words = tokenizer(text, stop_words=stop_words, min_length=MIN_TERM_LENGTH, max_length=MAX_TERM_LENGTH)
+                    # words = tokenizer(text, stop_words=stop_words, min_length=MIN_TERM_LENGTH, max_length=MAX_TERM_LENGTH)
+                    words = tokenizer(text)
                     doc_terms = {}
                     
                     for word in words:
@@ -163,7 +164,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("corpus_path", help="Directory with the files to index (scans recursively)")
     parser.add_argument("--memory_limit", type=int, default=10, help="Memory limit for buffering documents before writing to disk")
-    parser.add_argument("--output_path", default="output", help="Output directory for index files")
+    parser.add_argument("--output_path", default="output3", help="Output directory for index files")
     parser.add_argument("--stop_words_path", help="Path to file with stop words")
     args = parser.parse_args()
 

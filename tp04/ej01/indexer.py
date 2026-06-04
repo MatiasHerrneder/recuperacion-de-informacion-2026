@@ -3,12 +3,13 @@ import os
 import pickle
 import struct
 import re
+import time
 from tokenizer import tokenizer
 from PostingChunk import PostingChunk
 import shutil
 
 
-def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "output", stop_words_path: str | None = None):
+def index_bsbi(corpus_path: str, memory_limit: int = 1000, output_dir: str = "output3", stop_words_path: str | None = None):
     '''
     Implementa el algoritmo BSBI para indexar un corpus de documentos
     corpus_path: ruta al directorio con el corpus
@@ -47,12 +48,15 @@ def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "outp
     TXT_FILE_REGEX = re.compile(r"\.txt$", re.IGNORECASE)
 
     if os.path.isdir(corpus_path):
-        files_to_process = os.walk(corpus_path)
+        files_to_process = list(os.walk(corpus_path))
     else:
         if os.path.isfile(corpus_path) and TXT_FILE_REGEX.search(corpus_path):
             files_to_process = [(os.path.dirname(corpus_path), [], [os.path.basename(corpus_path)])]
         else:
-            raise Exception(f"Error: La ruta '{corpus_path}' no es un directorio o archivo válido.")
+            raise Exception(f"Error: La ruta '{corpus_path}' no es un directorio o archivo valido.")
+
+    corpus_size_bytes = 0
+    t_index_start = time.perf_counter()
 
     for root, _, files in files_to_process:
         for file in files:
@@ -60,6 +64,8 @@ def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "outp
             filepath = os.path.join(root, file)
             
             try:
+                corpus_size_bytes += os.path.getsize(filepath)
+
                 with open(filepath, 'r', encoding='utf-8') as f:
                     text = f.read()
                     
@@ -107,14 +113,23 @@ def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "outp
         with open(os.path.join(output_dir, "chunks", f"chunk_{chunk_id}.bin"), 'wb') as bin:
             bin.write(struct.pack(f'>{len(flat)}I', *flat))
         chunk_id += 1
+
+        del partial_tuples
+        del flat
     
+    t_index_end   = time.perf_counter()
+    indexing_time = t_index_end - t_index_start
 
     # MERGE
+    t_merge_start = time.perf_counter()
+
     chunk_pointers = [PostingChunk(os.path.join(output_dir, "chunks", f"chunk_{i}.bin")) for i in range(chunk_id)]
 
     vocabulary = {}
+    posting_list_lengths  = []
 
-    with open(os.path.join(output_dir, INDEX_SUBPATH), 'wb') as index:
+    index_path = os.path.join(output_dir, INDEX_SUBPATH)
+    with open(index_path, 'wb') as index:
         for term_id_actual in sorted(term_to_id.values()):
             posting_lists = []
             for chunk in chunk_pointers:
@@ -131,14 +146,35 @@ def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "outp
                 flat = [item for tup in posting_lists for item in tup]
                 index.write(struct.pack(f'>{len(flat)}I', *flat))
                 vocabulary[term_id_actual] = [seek_actual, len(posting_lists)]
+                posting_list_lengths.append(len(posting_lists))
 
     pickle.dump(vocabulary, open(os.path.join(output_dir, VOCABULARY_SUBPATH), 'wb'))
     pickle.dump(term_to_id, open(os.path.join(output_dir, TERM_ID_SUBPATH), 'wb'))
     pickle.dump(doc_index, open(os.path.join(output_dir, DOCUMENT_INDEX_SUBPATH), 'wb'))
 
+    t_merge_end = time.perf_counter()
+    merge_time  = t_merge_end - t_merge_start
+
     # implementar que pueda retomar si se cae ??
 
 
+    # METRICAS
+    index_size_bytes = os.path.getsize(index_path)
+ 
+    metrics = {
+        "indexing_time":        indexing_time,
+        "merge_time":           merge_time,
+        "total_time":           indexing_time + merge_time,
+        "num_chunks":           chunk_id,
+        "num_terms":            len(term_to_id),
+        "num_docs":             len(doc_index),
+        "index_size_bytes":     index_size_bytes,
+        "corpus_size_bytes":    corpus_size_bytes,
+        "overhead_ratio":       index_size_bytes / corpus_size_bytes if corpus_size_bytes else 0,
+        "posting_list_lengths": posting_list_lengths,
+    }
+ 
+    return metrics
 
 def main():
     parser = argparse.ArgumentParser()

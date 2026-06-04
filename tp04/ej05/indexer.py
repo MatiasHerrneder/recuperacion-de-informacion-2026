@@ -9,7 +9,7 @@ from PostingChunk import PostingChunk
 import shutil
 
 
-def index_bsbi(corpus_path: str, memory_limit: int = 10, output_dir: str = "output", stop_words_path: str | None = None):
+def index_bsbi(corpus_path: str, memory_limit: int = 10000, output_dir: str = "output", stop_words_path: str | None = None):
     '''
     Implementa el algoritmo BSBI para indexar un corpus de documentos
     corpus_path: ruta al directorio con el corpus
