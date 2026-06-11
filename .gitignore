@@ -5,3 +5,4 @@ output*/
 bsbi_experiments/
 .venv
 __pycache__
+lib/
